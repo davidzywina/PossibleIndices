@@ -4,4 +4,4 @@ The file "FindGroups.m" computes the groups G(N) satisfying conditions (a), (b),
 
 The file "IndexComputations.m" has code for the computations in section 5.2 and 5.3 of the paper; it requires the files groups0.dat and groups1.dat.
 
-There are many cases to consider and the code may take a while before it finishes; the two programs took around 30 and 20 minutes, respectively, using one of Cornell math department's machines (your times may vary).
+There are many cases to consider and the code may take a while before it finishes.  The two programs took around 30 and 20 minutes, respectively, using one of Cornell math department's machines (your times may vary).
