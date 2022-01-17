@@ -1,39 +1,168 @@
-// First load sequences "Groups0" and "Groups1"; they are computed by the file FindGroups.txt
-load "groups0.dat";
-load "groups1.dat";
-Groups0:=[ sub<GL(2,Integers(a[1])) | a[2]>  :  a in Groups0];
-Groups1:=[ sub<GL(2,Integers(a[1])) | a[2]>  :  a in Groups1];
 
+// We first define some group theory functions leading to "IndexOfCommutator" which for an open subgroup
+// of GL(2,Zhat) will allow us to compute the index of its commutator subgroup in SL(2,Zhat).
+
+function sl2Lift(H,m)
+    /* The group H is a subgroup of SL(2,Z/nZ) for some n>1.  Let m be a positive integer divisible by n.
+       The function outputs the full preimage of H in SL(2,Z/mZ) under the reduction modulo n map.
+    */
+    n:=#BaseRing(H);   assert IsDivisibleBy(m,n);
+    if n eq m then return H; end if;
+    Sm:=SL(2,Integers(m));
+    Sn,pi:=ChangeRing(Sm,Integers(n)); 
+    assert H subset Sn;
+    return sub<Sm|Kernel(pi),Inverse(pi)(H)>;
+end function;
+
+function gl2Lift(H,m)
+    /* The group H is a subgroup of GL(2,Z/nZ) for some n>1.  Let m be a positive integer divisible by n.
+       The function outputs the full preimage of H in GL(2,Z/mZ) under the reduction modulo n map.
+    */
+    n:=#BaseRing(H);   assert IsDivisibleBy(m,n);
+    if n eq m then return H; end if;
+    Sm:=GL(2,Integers(m));
+    Sn,pi:=ChangeRing(Sm,Integers(n)); 
+    assert H subset Sn;
+    return sub<Sm|Kernel(pi),Inverse(pi)(H)>;
+end function;
+
+function sl2Level(G)
+    /*  G is a subgroup of SL(2,Z/NZ) for some integer N>1.
+        The function returns the least positive divisor m of N such that G is the full inverse image of its reduction mod m.
+    */
+    N:=#BaseRing(G);
+    index:=#SL(2,Integers(N)) div #G;
+    if index eq 1 then return 1; end if;
+    if IsPrime(N) then return N; end if;
+
+    P:=PrimeDivisors(N);    
+    for p in P do
+        m:=N div p;
+        SL2:=SL(2,Integers(m));
+        G_:=ChangeRing(G,Integers(m));
+        if Index(SL2,G_) eq index then    // Equivalently, the level of G divides N/p            
+            return sl2Level(G_);
+        end if;
+    end for;
+    return N;
+end function;
+
+function gl2Level(G)
+    /*  G is a subgroup of GL(2,Z/NZ) for some integer N>1.
+        The function returns the least positive divisor m of N such that G is the full inverse image of its reduction mod m.
+    */
+    N:=#BaseRing(G);
+    index:=#GL(2,Integers(N)) div #G;
+    if index eq 1 then return 1; end if;
+    if IsPrime(N) then return N; end if;
+
+    P:=PrimeDivisors(N);    
+    for p in P do
+        m:=N div p;
+        GL2:=GL(2,Integers(m));
+        G_:=ChangeRing(G,Integers(m));
+        if Index(GL2,G_) eq index then    // Equivalently, the level of G divides N/p            
+            return gl2Level(G_);
+        end if;
+    end for;
+    return N;
+end function;
+
+function FindCommutatorSubgroup(G)
+    /* 
+        Input:
+            G: a subgroup of GL(2,Z/NZ) for some N>1
+
+        Taking the inverse image under the reduction modulo N map, we may view G as an open subgroup of GL(2,Z_N),
+        where Z_N is the ring of N-adic integers.
+        Let [G,G] be the commutator subgroup of GL(2,Z_N); it is an open subgroup of SL(2,Z_N).
+
+        Output:
+            M:      the level of [G,G] in SL(2,Z_N)
+            gens:   generators for the image of [G,G] modulo M
+            index:  index of [G,G] in SL(2,Z_N).
+    */
+    N:=#BaseRing(G);
+    P:=PrimeDivisors(N);
+
+    // First consider the prime power case
+    if #P eq 1 then
+        p:=P[1];
+        
+        M:=gl2Level(G);
+        // Deal directly with the case M=1, ie, G=GL(2,Z/NZ).
+        if M eq 1 then
+            if p ne 2 then
+                return 1, [], 1;
+            else 
+                return 2, [[1,1,1,0]], 2;
+            end if;
+        end if;
+
+        G:=ChangeRing(G,Integers(M));
+        if M eq 2 then M:=4; G:=gl2Lift(G,4); end if; 
+
+        repeat
+            G_M:=gl2Lift(G,M);     
+            S:=CommutatorSubgroup(G_M);
+       
+            G_Mp:=gl2Lift(G,M*p);
+            Sp:=CommutatorSubgroup(G_Mp);
+
+            i_M:=Index(SL(2,Integers(M)),S);
+            i_Mp:=Index(SL(2,Integers(M*p)),Sp);
+            
+            if  i_M ne i_Mp then
+                M:=M*p;
+            end if;        
+        until i_M eq i_Mp;
+    
+        M:=sl2Level(S); 
+        if M eq 1 then return 1, [], 1; end if;
+
+        gens:= [Eltseq( SL(2,Integers(M))!g ): g in Generators(S)];
+        return M, gens, i_M;       
+    end if;
+
+    // When N is not a prime power, we first find an integer M that is divisible by the level of [G,G].
+    // We go prime by prime and use the above computations.
+    M:=1;
+    for p in P do
+        q:= p^Valuation(N,p);
+        m:= N div q;
+
+        phi:=hom<G->GL(2,Integers(m))| [ChangeRing(G.i,Integers(m)): i in [1..Ngens(G)]]>;
+        B:=ChangeRing(Kernel(phi),Integers(q));
+        //  B x {I} is a subgroup of GL(2,Z/q) x GL(2,Z/m) = GL(2,Z/N)
+        Mp,_,_:=FindCommutatorSubgroup(B);        
+        M:=M*Mp;
+    end for;
+    // The level of [G,G] divides M.
+    G_:=gl2Lift(G,LCM([M,N]));  
+    G_:=ChangeRing(G_,Integers(M));  
+    S:=CommutatorSubgroup(G_);  // have lifted group so that this will be the desired commutator subgroup
+
+    M:=sl2Level(S);
+    S:=ChangeRing(S,Integers(M));
+    gens:= [Eltseq(g): g in Generators(S)];
+    index:=Index(SL(2,Integers(M)),S);
+
+    return M, gens, index; 
+end function;
 
 function IndexOfCommutator(G)
-/*  The group G is a subgroup of GL(2,Z/NZ) with N>1 (we will also assume that N is odd or divisible by 8). 
-    This function computes the index [SL(2,Zhat) : G'], where GG is the inverse image of G in GL(2,Zhat).
+/*  The group G is a subgroup of GL(2,Z/NZ) with N>1 that we can idenitify with an open subgroup of GL(2,Zhat). 
+    This function computes the index [SL(2,Zhat) : [G,G]], where [G,G] is the commutator subgroup of G in GL(2,Zhat).
 */
+    _,_,index:=FindCommutatorSubgroup(G);
     N:=#BaseRing(G);
-    r:=&*PrimeDivisors(N); 
-
-    // The following set S will give a set that topologically generates GG_N.
-    S:={[Integers()!A[1,1], Integers()!A[1,2], Integers()!A[2,1], Integers()!A[2,2]] : A in Generators(G)};
-    S:=S join {[1,N,0,1],[1,0,N,1],[1+N,N,-N,1-N],[1+N,0,0,1]};
-
-    M:=N;  
-    repeat
-       H:=DerivedSubgroup( sub<GL(2,Integers(M*r))| S> );       
-       B:=sub<SL(2,Integers(M*r)) | [[1,M,0,1],[1,0,M,1],[1+M,M,-M,1-M]]>;    
-       // The group B consists of the matrices in SL(2,Z/(Mr)) that are congruent to I modulo M.
-
-       b:=Index(B, B meet H);
-       if b ne 1 then
-          M:=M * Minimum(PrimeDivisors(b));  // increase M.
-       end if;
-    until b eq 1;
-
-    return Index(SL(2,Integers(M*r)), H) * (2 div GCD(2,N));
+    if IsOdd(N) then index:=2*index; end if;
+    return index;
 end function;
 
 
 
-/* The following four functions are altered versions of functions of Drew Sutherland; 
+/* The following four functions are altered versions of functions of Andrew Sutherland; 
    they are used for computing and working with a basis of E[N]. 
    (We will only make use of these functions for an elliptic curve E/F_p with j-invariant 0 or 1728 and (p,6)=1)
 */
@@ -112,6 +241,7 @@ function TorsionBasis(E,N)
 	EL:=ChangeRing(E,L);
 	return [EL![x1,y1],EL![x2,y2]];
 end function;
+
 
 function TorsionPoints(B,N)
 // Given a basis B for E[N], returns a list A of the points in E[N] ordered so that A[i*N+j+1] = i*B[1]+j*B[2] for i,j in [0,N-1]
@@ -349,9 +479,12 @@ end function;
 
 /*------------------------------------------------------------------------------*/
 // We now do our genus 0 index computations
-print "Starting genus 0 verifications (this may take a while).";
-
+// Load the sequence "Groups0" from the file groups0.dat that are computed by the file FindGroups.m
+load "groups0.dat";
+Groups0:=[ sub<GL(2,Integers(a[1])) | a[2]>  :  a in Groups0];
 I0:={2, 4, 6, 8, 10, 12, 16, 20, 24, 30, 32, 36, 40, 48, 54, 60, 72, 84, 96, 108, 112,120, 144, 192, 288, 336, 384, 576, 768, 864, 1152, 1200, 1296, 1536};
+
+print "Starting genus 0 verifications (this may take a while).";
 
 // We start with {2} because of the excluded level N=1 case.
 S1:={2};
@@ -360,7 +493,6 @@ S2:={2};
 for G in Groups0 do
     ind:=IndexOfCommutator(G);
     S2:=S2 join {ind};
-
     N:=#BaseRing(G);
     if #[p : p in PrimeDivisors(N)| not HasQpCusps(G,p)] le 1 then
        S1:=S1 join {ind};
@@ -373,11 +505,16 @@ assert S1 eq I0;
 
 /*------------------------------------------------------------------------------*/
 // We now do our genus 1 index computations
+// Load the sequence "Groups1" from the file groups1.dat that are computed by the file FindGroups.m
+load "groups1.dat";
+Groups1:=[ sub<GL(2,Integers(a[1])) | a[2]>  :  a in Groups1];
+
 print "Starting genus 1 verifications (this may take a while).";
 
 list:=[];
 for G in Groups1 do
-    if IndexOfCommutator(G) notin I0 then
+    ind:=IndexOfCommutator(G);
+    if ind notin I0 then
        E:=JacobianOfXG(G);
        if Rank(E) ne 0 then          
           list:=list cat [G];
@@ -417,3 +554,4 @@ for G in list do
 end for;
 
 print "Done.";
+

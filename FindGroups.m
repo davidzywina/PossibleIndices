@@ -339,19 +339,18 @@ function FindGroups(r)
 
    // Checks condition (e)
    GG_:=[];
-   for G in GG do
-       CC:=[C[3]: C in ConjugacyClasses(G)];
-       CC:=[A: A in CC | Trace(A) eq 0 and Determinant(A) eq -1];
-       CC:=[A: A in CC | IsConjugate(GL2,A,GL2![1,0,0,-1]) or IsConjugate(GL2,A,GL2![1,1,0,-1])];
-       if #CC ne 0 then              
-           GG_:=GG_ cat [G];
-       end if;
+   for G in GG do 
+        CC:=[C[3]: C in ConjugacyClasses(G)];
+        flag:=exists{A: A in CC | Trace(A) eq 0 and Determinant(A) eq -1 
+                                  and (IsConjugate(GL2,A,GL2![1,0,0,-1]) or IsConjugate(GL2,A,GL2![1,1,0,-1])) };       
+        if flag then              
+            GG_:=GG_ cat [G];
+        end if;
    end for;
    GG:=GG_;
 
    return GG;
 end function;
-
 
 
 /* We now compute all the groups G(N), with N>1, that are needed for our computations.  
@@ -362,6 +361,7 @@ end function;
 print "Computing relevant genus 0 groups.  (Warning: this may take a while)";
 Groups0:=[];
 for j in [1..#CPdataG0] do
+    print "Case ",j," of ",#CPdataG0;
     r:=CPdataG0[j];    
     GG:=FindGroups(r); 
     for G in GG do
@@ -381,6 +381,7 @@ PrintFile(datafile,";");
 print "Computing relevant genus 1 groups.  (Warning: this may take a while)";
 Groups1:=[];
 for j in [1..#CPdataG1] do
+    print "Case ",j," of ",#CPdataG1;
     r:=CPdataG1[j];    
     GG:=FindGroups(r); 
     for G in GG do
@@ -397,3 +398,4 @@ PrintFile(datafile,Groups1);
 PrintFile(datafile,";");
 
 print "Done.";
+
